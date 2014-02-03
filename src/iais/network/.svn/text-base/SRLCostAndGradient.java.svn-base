@@ -1,0 +1,622 @@
+package iais.network;
+
+import java.util.List;
+import java.util.Map;
+
+import org.ejml.simple.SimpleMatrix;
+
+import edu.stanford.nlp.ling.CoreAnnotations;
+import edu.stanford.nlp.ling.CoreAnnotations.IndexAnnotation;
+import edu.stanford.nlp.ling.CoreLabel;
+import edu.stanford.nlp.optimization.AbstractCachingDiffFunction;
+import edu.stanford.nlp.rnn.RNNCoreAnnotations;
+import edu.stanford.nlp.rnn.RNNCoreAnnotations.Labels;
+import edu.stanford.nlp.rnn.RNNCoreAnnotations.VerbIds;
+import edu.stanford.nlp.rnn.RNNUtils;
+import edu.stanford.nlp.rnn.SimpleTensor;
+import edu.stanford.nlp.trees.Tree;
+import edu.stanford.nlp.util.Generics;
+import edu.stanford.nlp.util.TwoDimensionalMap;
+
+
+/**
+ * Implementation of leaf-nodes tagging approach: Each word/leaf is classified into a  semantic role using
+ * the following features:
+ * 
+ * topnode (top node in the syntactic path from word to verb)
+ * verbnode
+ * wordToTag
+ * 
+ * @author bhanu
+ *
+ */
+public class SRLCostAndGradient extends AbstractCachingDiffFunction {
+	RNTNModel model;
+	List<Tree> trainingBatch;
+	List<VerbIds> verbIndices;
+	List<Labels> sentenceLabels;
+	private SimpleMatrix topDelta;
+	private SimpleMatrix softmaxCD;
+	
+	static final Integer topNodeId = 0;
+	static final Integer paddingNodeId = -1;
+
+	public SRLCostAndGradient(RNTNModel model, List<Tree> trainingBatch) {
+		this.model = model;
+		this.trainingBatch = trainingBatch;
+
+		if(trainingBatch != null){
+			this.verbIndices = Generics.newArrayList();
+			this.sentenceLabels = Generics.newArrayList();
+			for (Tree tree : trainingBatch){
+				CoreLabel label  = (CoreLabel)tree.label();				
+				this.verbIndices.add(label.get(RNNCoreAnnotations.VerbIdsAnnotation.class));				
+				this.sentenceLabels.add(label.get(RNNCoreAnnotations.TagsAnnotation.class));
+			}
+		}
+	}
+
+	public int domainDimension() {
+		// TODO: cache this for speed?
+		return model.totalParamSize();
+	}
+
+	public double sumError(Tree tree) {
+		if (tree.isLeaf()) {
+			return 0.0;
+		} else if (tree.isPreTerminal()) {
+			return RNNCoreAnnotations.getPredictionError(tree);
+		} else {
+			double error = 0.0;
+			for (Tree child : tree.children()) {
+				error += sumError(child);
+			}
+			return RNNCoreAnnotations.getPredictionError(tree) + error;
+		}
+	}
+
+	/**
+	 * Returns the index with the highest value in the <code>predictions</code> matrix.
+	 * Indexed from 0.
+	 */
+	public int getPredictedClass(SimpleMatrix predictions) {
+		int argmax = 0;
+		for (int i = 1; i < predictions.getNumElements(); ++i) {
+			if (predictions.get(i) > predictions.get(argmax)) {
+				argmax = i;
+			}
+		}
+		return argmax;
+	}
+
+	public void calculate(double[] theta) {
+		model.vectorToParams(theta);
+
+		// We use TreeMap for each of these so that they stay in a
+		// canonical sorted order
+		// TODO: factor out the initialization routines
+		// binaryTD stands for Transform Derivatives (see the SRLModel)
+		TwoDimensionalMap<String, String, SimpleMatrix> binaryTD = TwoDimensionalMap.treeMap();
+		// the derivatives of the tensors for the binary nodes
+		TwoDimensionalMap<String, String, SimpleTensor> binaryTensorTD = TwoDimensionalMap.treeMap();
+		// binaryCD stands for Classification Derivatives
+		TwoDimensionalMap<String, String, SimpleMatrix> binaryCD = TwoDimensionalMap.treeMap();
+
+		// unaryCD stands for Classification Derivatives
+		Map<String, SimpleMatrix> unaryCD = Generics.newTreeMap();
+
+		// word vector derivatives
+		Map<String, SimpleMatrix> wordVectorD = Generics.newTreeMap();
+
+		for (TwoDimensionalMap.Entry<String, String, SimpleMatrix> entry : model.binaryTransform) {
+			int numRows = entry.getValue().numRows();
+			int numCols = entry.getValue().numCols();
+
+			binaryTD.put(entry.getFirstKey(), entry.getSecondKey(), new SimpleMatrix(numRows, numCols));
+		}
+
+		if (!model.op.combineClassification) {
+			for (TwoDimensionalMap.Entry<String, String, SimpleMatrix> entry : model.binaryClassification) {
+				int numRows = entry.getValue().numRows();
+				int numCols = entry.getValue().numCols();
+
+				binaryCD.put(entry.getFirstKey(), entry.getSecondKey(), new SimpleMatrix(numRows, numCols));
+			}
+		}
+
+		if (model.op.useTensors) {
+			for (TwoDimensionalMap.Entry<String, String, SimpleTensor> entry : model.binaryTensors) {
+				int numRows = entry.getValue().numRows();
+				int numCols = entry.getValue().numCols();
+				int numSlices = entry.getValue().numSlices();
+
+				binaryTensorTD.put(entry.getFirstKey(), entry.getSecondKey(), new SimpleTensor(numRows, numCols, numSlices));
+			}
+		}
+
+		for (Map.Entry<String, SimpleMatrix> entry : model.unaryClassification.entrySet()) {
+			int numRows = entry.getValue().numRows();
+			int numCols = entry.getValue().numCols();
+			unaryCD.put(entry.getKey(), new SimpleMatrix(numRows, numCols));
+		}
+		for (Map.Entry<String, SimpleMatrix> entry : model.wordVectors.entrySet()) {
+			int numRows = entry.getValue().numRows();
+			int numCols = entry.getValue().numCols();
+			wordVectorD.put(entry.getKey(), new SimpleMatrix(numRows, numCols));
+		}
+
+		// TODO: This part can easily be parallelized
+		List<Tree> forwardPropTrees = Generics.newArrayList();
+		List<Tree> subtrees = Generics.newArrayList();
+		List<List<Integer>> inputNodeIds = Generics.newArrayList();
+		//		List<Tree> verbNodes = Generics.newArrayList();
+		//		List<Tree> wordNodes  = Generics.newArrayList();
+		//		List<Integer> distances = Generics.newArrayList();
+		double error = 0.0;
+		for (int i=0; i<trainingBatch.size(); i++){	
+			if((verbIndices.get(i).size() == 0) || trainingBatch.get(i).isLeaf())
+				continue;
+			for(int nverbs=0; nverbs < verbIndices.get(i).size(); nverbs++){// verbIndex : verbIndices.get(i)){
+				Tree tree = trainingBatch.get(i); //sentence tree
+				Integer verbIndex = verbIndices.get(i).get(nverbs); //verbindex for this sentence
+				List<Tree> leaves = tree.getLeaves();
+				if(sentenceLabels.get(i).get(nverbs).size() != leaves.size())
+					continue;  //sentence tokens and labels mismatch.. have to fix this
+
+				for(int wid=0; wid<leaves.size(); wid++){
+					Tree trainingTree = tree.deepCopy();
+					setVerbNWordIndexFeatures(trainingTree, verbIndex, wid);
+					Integer trueLabel = sentenceLabels.get(i).get(nverbs).get(wid);
+					forwardPropagateTree(trainingTree); //calculate nodevectors
+
+					//find the subtree spanned by word and verb pair
+					//					List<Tree> leaves = trainingTree.getLeaves();
+					Tree subtree = findSubTree(trainingTree, verbIndex, wid, trueLabel);
+					List<Integer> nodeIds = getCatInputNodes(trainingTree, subtree, model.op.windowSize, verbIndex, wid);
+					//					Tree word = trainingTree.getLeaves().get(wid);
+					//					Tree verb = trainingTree.getLeaves().get(verbIndex);
+
+					// this will attach the error vectors and prediction class to the top node of the subtree
+					// to each node in the tree
+					calcPredictions(trainingTree, subtree, nodeIds); //calculate prediction for this word and verb pair	
+
+					error += RNNCoreAnnotations.getPredictionError(subtree); //-1*Math.log(label.get(RNNCoreAnnotations.Predictions.class).get(trueLabel, 0)); //calculate error
+
+					//add trees and nodes for backpropagation
+//					Tree subtreecopy = subtree.deepCopy();
+					forwardPropTrees.add(trainingTree);
+					subtrees.add(subtree);
+//					List<Tree> nodesCopy = getCatInputNodes(subtreecopy, leaves, model.op.windowSize, verbIndex, wid);
+					inputNodeIds.add(nodeIds);
+					//					verbNodes.add(verb.deepCopy());
+					//					wordNodes.add(word.deepCopy());
+					//					distances.add(verbIndex-wid);
+				}
+			}
+			//			//average word log-likelihood for all the verb-words in this sentence.
+			//			error = error / (verbIndices.get(i).size()*trainingBatch.get(i).getLeaves().size());
+		}  
+
+		//backpropagate error and derivatives for each word, verb example
+		//currently assuming that batch size should be one, i.e. one sentence 
+		for (int i=0; i<forwardPropTrees.size();i++) {
+			backpropDerivativesAndError(forwardPropTrees.get(i), subtrees.get(i), inputNodeIds.get(i), 
+					binaryTD, binaryCD, binaryTensorTD, unaryCD, wordVectorD);
+		}
+
+		// scale the error by the number of sentences so that the
+		// regularization isn't drowned out for large training batchs
+		//		double scale = (1.0 / trainingBatch.size());
+		Integer nTrees = 1;
+		if(forwardPropTrees.size() != 0)
+			nTrees = forwardPropTrees.size();
+		double scale = (1.0 / nTrees);
+		value = error * scale;
+
+		value += scaleAndRegularize(binaryTD, model.binaryTransform, scale, model.op.trainOptions.regTransform);
+		value += scaleAndRegularize(binaryCD, model.binaryClassification, scale, model.op.trainOptions.regClassification);
+		value += scaleAndRegularizeTensor(binaryTensorTD, model.binaryTensors, scale, model.op.trainOptions.regTransform);
+		value += scaleAndRegularize(unaryCD, model.unaryClassification, scale, model.op.trainOptions.regClassification);
+		value += scaleAndRegularize(wordVectorD, model.wordVectors, scale, model.op.trainOptions.regWordVector);
+
+		derivative = RNNUtils.paramsToVector(theta.length, binaryTD.valueIterator(), 
+				binaryCD.valueIterator(), 
+				SimpleTensor.iteratorSimpleMatrix(binaryTensorTD.valueIterator()), 
+				unaryCD.values().iterator(), wordVectorD.values().iterator());
+	}
+
+	/** This method adds indexes of all the nodes to be used as input for classification
+	 * 	Since node indexes are indexed starting from 1, index of the top node = 0 and for padding node = -1**/
+	public List<Integer> getCatInputNodes(Tree tree, Tree subtree, int windowSize, int vid, int wid) {
+		List<Integer> nodes = Generics.newArrayList();
+		List<Tree> leaves = tree.getLeaves();
+		CoreLabel label = null;
+		Integer nid = null;
+		
+		//top node  //for top node add id as -1
+//		nodes.add(subtree);	
+//		label = (CoreLabel)subtree.label();
+//		nid = label.get(IndexAnnotation.class);
+		nodes.add(topNodeId);
+		//verb node
+		label = (CoreLabel) leaves.get(vid).label();
+		nodes.add(label.get(IndexAnnotation.class));
+//		nodes.add(leaves.get(vid));	
+		//word to tag node
+		label = (CoreLabel)leaves.get(wid).label();
+		nodes.add(label.get(IndexAnnotation.class));
+//		nodes.add(leaves.get(wid));	
+		
+		//left context
+		for(int i=1 ; i <= windowSize; i++){
+			if(wid-i < 0)
+				nodes.add(paddingNodeId);
+			else{
+				label = (CoreLabel)leaves.get(wid-i).label();
+				nodes.add(label.get(IndexAnnotation.class));
+//				nodes.add(leaves.get(wid-i));
+			}
+		}		
+		//right context
+		for(int i=1 ; i <= windowSize; i++){
+			if(wid+i >= leaves.size())
+				nodes.add(paddingNodeId);
+			else{
+				label = (CoreLabel)leaves.get(wid+i).label();
+				nodes.add(label.get(IndexAnnotation.class));
+//				nodes.add(leaves.get(wid+i));
+			}
+				
+		}
+
+		return nodes;
+	}
+
+	public void setVerbNWordIndexFeatures(Tree trainingTree, Integer verbIndex, int wid) {
+		//minimum distance = 0 and maximum distance = 10
+		double maxDistance = 10.0;
+		List<Tree> words = trainingTree.getLeaves();
+		for(int i=0; i< words.size(); i++){
+			String wordStr = words.get(i).label().value();
+			SimpleMatrix nodeVector = model.getWordVector(wordStr);
+			int row = nodeVector.numRows() - 2;
+			double word2word = i - wid;
+			double word2verb = i - verbIndex;
+			if((Math.abs(word2word) > 10))
+				word2word = maxDistance;
+			if(Math.abs(word2verb) > 10)
+				word2verb = maxDistance;
+
+			word2word /= maxDistance;
+			word2verb /= maxDistance;
+
+			nodeVector.set(row, 0, word2word);
+			nodeVector.set(row+1, 0, word2verb);
+		}
+
+	}
+
+	/** This method calculates predictions and error for each verb, word subtree 
+	 * @param i 
+	 *  */
+	public void calcPredictions(Tree tree, Tree subtree, List<Integer> nodes) {
+		//predict using the nodevector of the root of the tree
+		//		SimpleMatrix topNodeVector = RNNCoreAnnotations.getNodeVector(subtree);
+		//		SimpleMatrix verbVector = RNNCoreAnnotations.getNodeVector(verbnode);
+		//		SimpleMatrix wordVector = RNNCoreAnnotations.getNodeVector(wordnode);
+
+		SimpleMatrix classification =  model.getUnaryClassification(subtree.label().value());  //to check #bhanu	
+		//		SimpleMatrix catInput = RNNUtils.concatenateWithBias(topNodeVector, verbVector, wordVector);//, new SimpleMatrix(1,1));
+		//		catInput = RNNUtils.concatenate(catInput, new SimpleMatrix(1,1));
+		//		int lastrow = catInput.numRows() - 2;
+		//		catInput.set(lastrow, 0, distance);
+		SimpleMatrix catInput = getCatInput(tree, subtree, nodes);
+		SimpleMatrix predictions = RNNUtils.softmax(classification.mult(catInput));
+
+		int index = getPredictedClass(predictions);
+		if (!(subtree.label() instanceof CoreLabel)) {
+			throw new AssertionError("Expected CoreLabels in the nodes");
+		}
+		SimpleMatrix goldLabel = new SimpleMatrix(model.numClasses, 1);
+		int goldClass = RNNCoreAnnotations.getGoldClass(subtree);
+		goldLabel.set(goldClass, 1.0);
+		double error = -(RNNUtils.elementwiseApplyLog(predictions).elementMult(goldLabel).elementSum());
+
+		RNNCoreAnnotations.setPredictionError(subtree, error);
+		CoreLabel label = (CoreLabel)subtree.label();
+		label.set(RNNCoreAnnotations.Predictions.class, predictions);
+		label.set(RNNCoreAnnotations.PredictedClass.class, index);
+	}
+
+
+	private SimpleMatrix getCatInput(Tree tree, Tree subtree, List<Integer> nodeIds) {
+		SimpleMatrix catInput = null;
+		SimpleMatrix thisvector = null;
+		List<Tree> leaves = tree.getLeaves();
+		for (Integer nodeId : nodeIds){
+			if(nodeId==paddingNodeId) //add padding vector
+				thisvector = model.getWordVector(RNTNModel.PADDING);
+			else if(nodeId > topNodeId)
+				thisvector = model.getWordVector(leaves.get(nodeId-1).label().value());
+			else if(nodeId == topNodeId) //topnode
+				thisvector = RNNCoreAnnotations.getNodeVector(subtree);
+
+			if(catInput == null)
+				catInput = thisvector;
+			else
+				catInput = RNNUtils.concatenate(catInput, thisvector);	
+		}
+
+		return RNNUtils.concatenateWithBias(catInput);
+
+		//		return RNNUtils.concatenateWithBias(RNNCoreAnnotations.getNodeVector(nodes.get(0))); //only topnode vector
+	}
+
+	/** returns subtree spanned by the verb, word pair
+	 * @param trueLabel 
+	 * @return **/
+	public Tree findSubTree(Tree tree, Integer verbId, Integer wordId, Integer trueLabel){
+		Tree maxnode = null;
+		List<Tree> t = tree.getLeaves();
+		if(verbId == wordId)
+			maxnode = t.get(verbId);
+		else{
+
+			try{
+				List<Tree> verbtoroot = tree.pathNodeToNode(t.get(verbId), tree);
+				List<Tree> wordtoroot = tree.pathNodeToNode(t.get(wordId), tree);
+
+				for (int i=1; i< verbtoroot.size(); i++){  //start from a non-terminal node
+					Tree verbpathnode = verbtoroot.get(i);
+					for (int j=1; j<wordtoroot.size(); j++){
+						Tree wordpathnode = wordtoroot.get(j);
+						if(wordpathnode.equals(verbpathnode)){
+							maxnode = wordpathnode;
+							break;
+						}				 	
+					}
+					if(maxnode != null)
+						break;
+				}
+			}catch(Exception e){
+				System.out.println("Leaves: "+ t.toString());
+				e.printStackTrace();
+			}
+		}
+
+		if(maxnode==null)
+			maxnode = tree;
+		RNNCoreAnnotations.setGoldClass(maxnode, trueLabel);
+		return maxnode;
+	}
+
+	double scaleAndRegularize(TwoDimensionalMap<String, String, SimpleMatrix> derivatives,
+			TwoDimensionalMap<String, String, SimpleMatrix> currentMatrices,
+			double scale,
+			double regCost) {
+		double cost = 0.0; // the regularization cost
+		for (TwoDimensionalMap.Entry<String, String, SimpleMatrix> entry : currentMatrices) {
+			SimpleMatrix D = derivatives.get(entry.getFirstKey(), entry.getSecondKey());
+			D = D.scale(scale).plus(entry.getValue().scale(regCost));
+			derivatives.put(entry.getFirstKey(), entry.getSecondKey(), D);
+			cost += entry.getValue().elementMult(entry.getValue()).elementSum() * regCost / 2.0;
+		}
+		return cost;
+	}
+
+	double scaleAndRegularize(Map<String, SimpleMatrix> derivatives,
+			Map<String, SimpleMatrix> currentMatrices,
+			double scale,
+			double regCost) {
+		double cost = 0.0; // the regularization cost
+		for (Map.Entry<String, SimpleMatrix> entry : currentMatrices.entrySet()) {
+			SimpleMatrix D = derivatives.get(entry.getKey());
+			D = D.scale(scale).plus(entry.getValue().scale(regCost));
+			derivatives.put(entry.getKey(), D);
+			cost += entry.getValue().elementMult(entry.getValue()).elementSum() * regCost / 2.0;
+		}
+		return cost;
+	}
+
+	double scaleAndRegularizeTensor(TwoDimensionalMap<String, String, SimpleTensor> derivatives,
+			TwoDimensionalMap<String, String, SimpleTensor> currentMatrices,
+			double scale,
+			double regCost) {
+		double cost = 0.0; // the regularization cost
+		for (TwoDimensionalMap.Entry<String, String, SimpleTensor> entry : currentMatrices) {
+			SimpleTensor D = derivatives.get(entry.getFirstKey(), entry.getSecondKey());
+			D = D.scale(scale).plus(entry.getValue().scale(regCost));
+			derivatives.put(entry.getFirstKey(), entry.getSecondKey(), D);
+			cost += entry.getValue().elementMult(entry.getValue()).elementSum() * regCost / 2.0;
+		}
+		return cost;
+	}
+
+
+	private void backpropDerivativesAndError(Tree tree, Tree subtree, 
+			List<Integer> nodes, TwoDimensionalMap<String, String, SimpleMatrix> binaryTD,
+			TwoDimensionalMap<String, String, SimpleMatrix> binaryCD,
+			TwoDimensionalMap<String, String, SimpleTensor> binaryTensorTD,
+			Map<String, SimpleMatrix> unaryCD,
+			Map<String, SimpleMatrix> wordVectorD) {
+
+		//update localCD and delta to be used in recursive backpropagation
+		//		SimpleMatrix topNodeVector = RNNCoreAnnotations.getNodeVector(subtree);
+		//		SimpleMatrix verbNodeVector = RNNCoreAnnotations.getNodeVector(verb);
+		//		SimpleMatrix wordNodeVector = RNNCoreAnnotations.getNodeVector(word);
+
+		String category = subtree.label().value();
+		category = model.basicCategory(category);
+		SimpleMatrix goldLabel = new SimpleMatrix(model.numClasses, 1);
+		int goldClass = RNNCoreAnnotations.getGoldClass(subtree);
+		goldLabel.set(goldClass, 1.0);
+		double nodeWeight = model.op.trainOptions.getClassWeight(goldClass);
+
+		SimpleMatrix predictions = RNNCoreAnnotations.getPredictions(subtree);
+		//delta_m = e^yi/sum(e^yj) -  1
+		topDelta = predictions.minus(goldLabel).scale(nodeWeight);
+
+		//deltaW_hm = n*delta_m*input_m
+		//		SimpleMatrix catInput = RNNUtils.concatenateWithBias(topNodeVector, verbNodeVector, wordNodeVector);//, new SimpleMatrix(1,1));
+		//		catInput = RNNUtils.concatenateWithBias(catInput);
+		//		int lastrow = catInput.numRows() - 2;
+		//		catInput.set(lastrow, 0, distance);
+		SimpleMatrix catInput = getCatInput(tree, subtree, nodes);
+		softmaxCD = topDelta.mult(catInput.transpose());
+
+		//update classification derivative
+		unaryCD.put(category, unaryCD.get(category).plus(softmaxCD));
+
+		//set node deltas for all nodes of this subtree to zero
+		SimpleMatrix unaryMat4Nodes = model.getUnaryClassification(category);
+		//		int endcol = unaryMat4Nodes.numCols() - 2; int endrow = unaryMat4Nodes.numRows();
+		//		unaryMat4Nodes = unaryMat4Nodes.extractMatrix(0, endrow, 0, endcol);
+		SimpleMatrix deltaFromClass = unaryMat4Nodes.transpose().mult(topDelta);
+		for (Tree node : tree){
+			RNNCoreAnnotations.setNodeDelta(node, new SimpleMatrix(model.op.numHid,1));
+		}
+		//set node deltas of verbnode, wordnode and topnode
+		setNodeDeltas(tree, subtree, nodes, deltaFromClass, wordVectorD);
+		//		RNNCoreAnnotations.setNodeDelta(subtree, deltaFromClass.extractMatrix(0, model.op.numHid, 0, 1));
+		//		RNNCoreAnnotations.setNodeDelta(verb, deltaFromClass.extractMatrix(model.op.numHid, 2*model.op.numHid, 0, 1));
+		//		RNNCoreAnnotations.setNodeDelta(word, deltaFromClass.extractMatrix(2*model.op.numHid, 3*model.op.numHid, 0, 1));		
+
+		//call recursive backpropagation for tensor, W and wordvector derivatives
+		SimpleMatrix delta = new SimpleMatrix(model.op.numHid, 1);
+		backpropDerivativesAndError(tree,  binaryTD, binaryTensorTD, wordVectorD, delta);
+	}
+
+	private void setNodeDeltas(Tree tree, Tree subtree, List<Integer> nodeIds, SimpleMatrix deltaFromClass, Map<String, SimpleMatrix> wordVectorD) {
+		int i = 0;
+		List<Tree> leaves = tree.getLeaves();
+		for(Integer nodeId : nodeIds){
+			if(nodeId > topNodeId)
+				RNNCoreAnnotations.setNodeDelta(leaves.get(nodeId-1), deltaFromClass.extractMatrix((i)*model.op.numHid, (i+1)*model.op.numHid, 0, 1));
+			else if(nodeId == topNodeId) //topnode
+				RNNCoreAnnotations.setNodeDelta(subtree, deltaFromClass.extractMatrix((i)*model.op.numHid, (i+1)*model.op.numHid, 0, 1));
+			else if(nodeId == paddingNodeId){ //add delta into padding word
+				String word = model.getVocabWord(RNTNModel.PADDING);
+				wordVectorD.put(word, wordVectorD.get(word).plus(deltaFromClass.extractMatrix((i)*model.op.numHid, (i+1)*model.op.numHid, 0, 1)));
+			}				
+			i++;
+		}		
+	}
+
+	private void backpropDerivativesAndError(Tree tree, 
+			TwoDimensionalMap<String, String, SimpleMatrix> binaryTD,
+			//			TwoDimensionalMap<String, String, SimpleMatrix> binaryCD,
+			TwoDimensionalMap<String, String, SimpleTensor> binaryTensorTD,
+			//			Map<String, SimpleMatrix> unaryCD,
+			Map<String, SimpleMatrix> wordVectorD,
+			SimpleMatrix deltaUp) {
+
+		SimpleMatrix currentVector = RNNCoreAnnotations.getNodeVector(tree);
+		String category = tree.label().value();
+		category = model.basicCategory(category);
+
+		if (tree.isLeaf()) {			
+			SimpleMatrix deltaFromClass = RNNCoreAnnotations.getNodeDelta(tree);
+			//			deltaFromClass = deltaFromClass.extractMatrix(0, model.op.numHid, 0, 1);//.elementMult(currentVectorDerivative);
+			SimpleMatrix deltaFull = deltaFromClass.plus(deltaUp);
+			String word = tree.label().value();
+			word = model.getVocabWord(word);
+			wordVectorD.put(word, wordVectorD.get(word).plus(deltaFull));
+		} else {
+			// Otherwise, this must be a binary node
+			SimpleMatrix currentVectorDerivative = RNNUtils.elementwiseApplyTanhDerivative(currentVector);
+			SimpleMatrix deltaFromClass = RNNCoreAnnotations.getNodeDelta(tree).elementMult(currentVectorDerivative);
+			//			deltaFromClass = deltaFromClass.extractMatrix(0, model.op.numHid, 0, 1).elementMult(currentVectorDerivative);
+			SimpleMatrix deltaFull = deltaFromClass.plus(deltaUp);
+			String leftCategory = model.basicCategory(tree.children()[0].label().value());
+			String rightCategory = model.basicCategory(tree.children()[1].label().value());
+			SimpleMatrix leftVector = RNNCoreAnnotations.getNodeVector(tree.children()[0]);
+			SimpleMatrix rightVector = RNNCoreAnnotations.getNodeVector(tree.children()[1]);
+			SimpleMatrix childrenVector = RNNUtils.concatenateWithBias(leftVector, rightVector);
+			//deltaW_gh = n*delta_h*input_h
+			SimpleMatrix W_df = deltaFull.mult(childrenVector.transpose());
+			binaryTD.put(leftCategory, rightCategory, binaryTD.get(leftCategory, rightCategory).plus(W_df));
+			SimpleMatrix deltaDown;
+			if (model.op.useTensors) {
+				SimpleTensor Wt_df = getTensorGradient(deltaFull, leftVector, rightVector);
+				binaryTensorTD.put(leftCategory, rightCategory, binaryTensorTD.get(leftCategory, rightCategory).plus(Wt_df));
+				deltaDown = computeTensorDeltaDown(deltaFull, leftVector, rightVector, model.getBinaryTransform(leftCategory, rightCategory), model.getBinaryTensor(leftCategory, rightCategory));
+			} else {
+				deltaDown = model.getBinaryTransform(leftCategory, rightCategory).transpose().mult(deltaFull);
+			}
+
+			SimpleMatrix leftDerivative = RNNUtils.elementwiseApplyTanhDerivative(leftVector);
+			SimpleMatrix rightDerivative = RNNUtils.elementwiseApplyTanhDerivative(rightVector);
+			SimpleMatrix leftDeltaDown = deltaDown.extractMatrix(0, deltaFull.numRows(), 0, 1);
+			SimpleMatrix rightDeltaDown = deltaDown.extractMatrix(deltaFull.numRows(), deltaFull.numRows() * 2, 0, 1);
+			backpropDerivativesAndError(tree.children()[0], binaryTD,  binaryTensorTD,  wordVectorD, leftDerivative.elementMult(leftDeltaDown));
+			backpropDerivativesAndError(tree.children()[1], binaryTD,  binaryTensorTD,  wordVectorD, rightDerivative.elementMult(rightDeltaDown));
+		}
+	}
+
+	private SimpleMatrix computeTensorDeltaDown(SimpleMatrix deltaFull, SimpleMatrix leftVector, SimpleMatrix rightVector,
+			SimpleMatrix W, SimpleTensor Wt) {
+		SimpleMatrix WTDelta = W.transpose().mult(deltaFull);
+		SimpleMatrix WTDeltaNoBias = WTDelta.extractMatrix(0, deltaFull.numRows() * 2, 0, 1);
+		int size = deltaFull.getNumElements();
+		SimpleMatrix deltaTensor = new SimpleMatrix(size*2, 1);
+		SimpleMatrix fullVector = RNNUtils.concatenate(leftVector, rightVector);
+		for (int slice = 0; slice < size; ++slice) {
+			SimpleMatrix scaledFullVector = fullVector.scale(deltaFull.get(slice));
+			deltaTensor = deltaTensor.plus(Wt.getSlice(slice).plus(Wt.getSlice(slice).transpose()).mult(scaledFullVector));
+		}
+		return deltaTensor.plus(WTDeltaNoBias);
+	}
+
+	private SimpleTensor getTensorGradient(SimpleMatrix deltaFull, SimpleMatrix leftVector, SimpleMatrix rightVector) {
+		int size = deltaFull.getNumElements();
+		SimpleTensor Wt_df = new SimpleTensor(size*2, size*2, size);
+		// TODO: combine this concatenation with computeTensorDeltaDown?
+		SimpleMatrix fullVector = RNNUtils.concatenate(leftVector, rightVector);
+		for (int slice = 0; slice < size; ++slice) {
+			Wt_df.setSlice(slice, fullVector.scale(deltaFull.get(slice)).mult(fullVector.transpose()));
+		}
+		return Wt_df;
+	}
+
+	/**
+	 * This is the method to call for assigning  node vectors
+	 * to the Tree.  After calling this, each of the non-leaf nodes will
+	 * have the node vector.  The annotations filled in are
+	 * the RNNCoreAnnotations.NodeVector. 
+	 */
+	public void forwardPropagateTree(Tree tree) {
+		SimpleMatrix nodeVector = null;
+
+		if (tree.isLeaf()) {
+			String word = tree.label().value();
+			nodeVector = model.getWordVector(word);
+		} else if (tree.children().length == 1) {
+			throw new AssertionError("Non-preterminal nodes of size 1 should have already been collapsed");
+		} else if (tree.children().length == 2) {
+			forwardPropagateTree(tree.children()[0]);
+			forwardPropagateTree(tree.children()[1]);
+
+			String leftCategory = tree.children()[0].label().value();
+			String rightCategory = tree.children()[1].label().value();
+			SimpleMatrix W = model.getBinaryTransform(leftCategory, rightCategory);
+
+			SimpleMatrix leftVector = RNNCoreAnnotations.getNodeVector(tree.children()[0]);
+			SimpleMatrix rightVector = RNNCoreAnnotations.getNodeVector(tree.children()[1]);
+			SimpleMatrix childrenVector = RNNUtils.concatenateWithBias(leftVector, rightVector);
+
+			if (model.op.useTensors) {
+				SimpleTensor tensor = model.getBinaryTensor(leftCategory, rightCategory);
+				SimpleMatrix tensorIn = RNNUtils.concatenate(leftVector, rightVector);
+				SimpleMatrix tensorOut = tensor.bilinearProducts(tensorIn);        
+				nodeVector = RNNUtils.elementwiseApplyTanh(W.mult(childrenVector).plus(tensorOut));
+			} else {
+				nodeVector = RNNUtils.elementwiseApplyTanh(W.mult(childrenVector));
+			}
+		} else {
+			throw new AssertionError("Tree not correctly binarized");
+		}
+
+		CoreLabel label = (CoreLabel) tree.label();
+		label.set(RNNCoreAnnotations.NodeVector.class, nodeVector);
+	}
+}

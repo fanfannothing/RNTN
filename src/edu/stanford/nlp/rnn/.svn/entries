@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<wc-entries
+   xmlns="svn:">
+<entry
+   name=""
+   repos="https://svn-int.iais.fraunhofer.de/repos/tmusers"
+   revision="8263"
+   last-author="bpratap"
+   url="https://svn-int.iais.fraunhofer.de/repos/tmusers/open/bpratap/RNTN/src/edu/stanford/nlp/rnn"
+   committed-rev="8263"
+   kind="dir"
+   committed-date="2013-11-15T16:54:35.076000Z"/>
+<entry
+   name="RNNCoreAnnotations.java"
+   revision="8319"
+   checksum="8fba95b7ef37959b835c61d4d6eb216a"
+   last-author="bpratap"
+   text-time="2014-01-03T13:32:01.000000Z"
+   committed-rev="8319"
+   kind="file"
+   committed-date="2014-01-03T15:48:17.703000Z"/>
+<entry
+   name="RNNUtils.java"
+   checksum="35b46ae30681e1f4232c41588e114e8f"
+   last-author="bpratap"
+   text-time="2013-11-11T09:26:53.000000Z"
+   committed-rev="8263"
+   kind="file"
+   committed-date="2013-11-15T16:54:35.076000Z"/>
+<entry
+   name="SimpleTensor.java"
+   checksum="1e94ad14d507016975709a72f25dd54f"
+   last-author="bpratap"
+   text-time="2013-11-11T09:26:53.000000Z"
+   committed-rev="8263"
+   kind="file"
+   committed-date="2013-11-15T16:54:35.076000Z"/>
+</wc-entries>

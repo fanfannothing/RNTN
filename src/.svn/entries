@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<wc-entries
+   xmlns="svn:">
+<entry
+   repos="https://svn-int.iais.fraunhofer.de/repos/tmusers"
+   name=""
+   revision="8263"
+   last-author="bpratap"
+   url="https://svn-int.iais.fraunhofer.de/repos/tmusers/open/bpratap/RNTN/src"
+   committed-rev="8263"
+   kind="dir"
+   committed-date="2013-11-15T16:54:35.076000Z"/>
+<entry
+   name="edu"
+   kind="dir"/>
+<entry
+   name="iais"
+   kind="dir"/>
+</wc-entries>

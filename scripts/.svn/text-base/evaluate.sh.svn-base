@@ -1,0 +1,1 @@
+java -mx10g -classpath $HOME/workspace/RNTN/bin:$HOME/workspace/RNTN/libs/ejml-0.23.jar:$HOME/workspace/RNTN/libs/jblas-1.2.0.jar:$HOME/workspace/RNTN/libs/jmatio-0.2.jar:$HOME/workspace/RNTN/libs/stanford-corenlp-3.2.0b.jar:$HOME/workspace/RNTN/libs/log4j-1.2.16.jar iais.network.Evaluate data/models/srl/rae_uf_wiki_lbfgs.mo-0243 data/corpus/wiki_200K.rntn

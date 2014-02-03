@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<wc-entries
+   xmlns="svn:">
+<entry
+   repos="https://svn-int.iais.fraunhofer.de/repos/tmusers"
+   name=""
+   revision="8263"
+   last-author="bpratap"
+   url="https://svn-int.iais.fraunhofer.de/repos/tmusers/open/bpratap/RNTN/src/edu/stanford/nlp/sentiment"
+   committed-rev="8263"
+   kind="dir"
+   committed-date="2013-11-15T16:54:35.076000Z"/>
+<entry
+   name="CollapseUnaryTransformer.java"
+   checksum="5781291d4c7454f60dd41f14799c2714"
+   last-author="bpratap"
+   committed-rev="8263"
+   text-time="2013-11-11T09:26:53.000000Z"
+   kind="file"
+   committed-date="2013-11-15T16:54:35.076000Z"/>
+<entry
+   name="Evaluate.java"
+   checksum="1b3d21a2e8b72512da0ebc4199e9b79c"
+   last-author="bpratap"
+   committed-rev="8263"
+   text-time="2013-11-11T09:26:53.000000Z"
+   kind="file"
+   committed-date="2013-11-15T16:54:35.076000Z"/>
+<entry
+   name="RNNOptions.java"
+   revision="8326"
+   checksum="b545369a7db9a34969658389c48330b1"
+   last-author="bpratap"
+   committed-rev="8326"
+   text-time="2014-01-10T12:32:17.000000Z"
+   kind="file"
+   committed-date="2014-01-10T14:43:26.922000Z"/>
+<entry
+   name="RNNTrainOptions.java"
+   revision="8328"
+   checksum="0d5943806febc42f97f177c80fe6c26c"
+   last-author="bpratap"
+   committed-rev="8328"
+   text-time="2014-01-14T14:19:41.000000Z"
+   kind="file"
+   committed-date="2014-01-14T14:33:09.524000Z"/>
+<entry
+   name="ReadSentimentDataset.java"
+   checksum="4235df97b54121d7dcbf6af86ac0de8a"
+   last-author="bpratap"
+   committed-rev="8263"
+   text-time="2013-11-11T09:26:53.000000Z"
+   kind="file"
+   committed-date="2013-11-15T16:54:35.076000Z"/>
+<entry
+   name="SentimentCoreAnnotations.java"
+   checksum="5570290e1afa62501754e181f12e0fd4"
+   last-author="bpratap"
+   committed-rev="8263"
+   text-time="2013-11-11T09:26:53.000000Z"
+   kind="file"
+   committed-date="2013-11-15T16:54:35.076000Z"/>
+<entry
+   name="SentimentCostAndGradient.java"
+   checksum="e81a0ad1ab823ec62902d22c022bb042"
+   last-author="bpratap"
+   committed-rev="8263"
+   text-time="2013-11-11T09:26:53.000000Z"
+   kind="file"
+   committed-date="2013-11-15T16:54:35.076000Z"/>
+<entry
+   name="SentimentModel.java"
+   checksum="8b3a08a5a445e349e0a8268eb9e4a4e6"
+   last-author="bpratap"
+   committed-rev="8263"
+   text-time="2013-11-11T09:26:53.000000Z"
+   kind="file"
+   committed-date="2013-11-15T16:54:35.076000Z"/>
+<entry
+   name="SentimentPipeline.java"
+   checksum="49c478b03e3613f14ef931d78776b59b"
+   last-author="bpratap"
+   committed-rev="8263"
+   text-time="2013-11-11T09:26:53.000000Z"
+   kind="file"
+   committed-date="2013-11-15T16:54:35.076000Z"/>
+<entry
+   name="SentimentTraining.java"
+   checksum="8167c295bf4dce3fe795d913a91a7dd7"
+   last-author="bpratap"
+   committed-rev="8263"
+   text-time="2013-11-11T09:26:53.000000Z"
+   kind="file"
+   committed-date="2013-11-15T16:54:35.076000Z"/>
+<entry
+   name="SentimentUtils.java"
+   checksum="a398e84fedb42612c740d5812bda5eaf"
+   last-author="bpratap"
+   committed-rev="8263"
+   text-time="2013-11-11T09:26:53.000000Z"
+   kind="file"
+   committed-date="2013-11-15T16:54:35.076000Z"/>
+</wc-entries>

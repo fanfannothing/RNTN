@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<wc-entries
+   xmlns="svn:">
+<entry
+   name=""
+   repos="https://svn-int.iais.fraunhofer.de/repos/tmusers"
+   revision="8263"
+   last-author="bpratap"
+   url="https://svn-int.iais.fraunhofer.de/repos/tmusers/open/bpratap/RNTN/scripts"
+   committed-rev="8263"
+   kind="dir"
+   committed-date="2013-11-15T16:54:35.076000Z"/>
+<entry
+   name="evaluate.sh"
+   revision="8318"
+   checksum="53690c024f605eb68aa64b4ad6ebb24c"
+   last-author="bpratap"
+   text-time="2013-12-26T13:07:29.000000Z"
+   committed-rev="8318"
+   kind="file"
+   committed-date="2013-12-30T17:33:01.181000Z"/>
+<entry
+   name="evaluateEmbeddings.py"
+   revision="8322"
+   checksum="439d7f5d891b87a1541b31905a1dbd89"
+   last-author="bpratap"
+   text-time="2014-01-06T16:37:20.000000Z"
+   committed-rev="8322"
+   kind="file"
+   committed-date="2014-01-07T10:57:19.710000Z"/>
+<entry
+   name="render.py"
+   revision="8294"
+   checksum="ff7cced82706e18b08ddd48794376180"
+   last-author="bpratap"
+   text-time="2013-12-13T17:23:27.000000Z"
+   committed-rev="8294"
+   kind="file"
+   committed-date="2013-12-17T15:00:24.360000Z"/>
+<entry
+   name="run.sh"
+   revision="8281"
+   checksum="3abf4c919aaa994005087836fb41aa3e"
+   last-author="bpratap"
+   text-time="2013-12-04T15:40:21.000000Z"
+   committed-rev="8281"
+   kind="file"
+   committed-date="2013-12-06T10:46:23.952000Z"
+   prop-time="2013-11-21T17:44:48.000000Z"/>
+<entry
+   name="train_phraseRep.sh"
+   revision="8318"
+   checksum="3f5d169b577351de127ca5eaa015cfb8"
+   last-author="bpratap"
+   text-time="2013-12-18T16:41:33.000000Z"
+   committed-rev="8318"
+   kind="file"
+   committed-date="2013-12-30T17:33:01.181000Z"
+   prop-time="2013-12-30T17:33:37.000000Z"/>
+<entry
+   name="tsne.py"
+   revision="8266"
+   checksum="67f90c9909067757102d8366bb3783eb"
+   last-author="bpratap"
+   text-time="2013-08-10T14:55:24.000000Z"
+   committed-rev="8266"
+   kind="file"
+   committed-date="2013-11-21T17:43:16.382000Z"/>
+<entry
+   name="visualizeTree.py"
+   revision="8318"
+   checksum="dadad1c4c50fef59baec0dd4168ba5dc"
+   last-author="bpratap"
+   text-time="2013-12-17T15:49:01.000000Z"
+   committed-rev="8318"
+   kind="file"
+   committed-date="2013-12-30T17:33:01.181000Z"/>
+</wc-entries>

@@ -1,0 +1,274 @@
+package iais.execs;
+
+import iais.io.SRLUtils;
+import iais.network.CompatibilityCostAndGradient;
+import iais.network.Evaluate;
+import iais.network.RNNPhraseModel;
+import iais.network.RNNPhraseOptions;
+import iais.network.RankingCostAndGradient;
+import iais.network.RankingCostAndGradient2;
+import iais.network.ReconContextCostAndGradient;
+import iais.network.ReconRankingCostAndGradient;
+import iais.network.ReconstructionCostAndGradient;
+
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
+import org.ejml.simple.SimpleMatrix;
+
+import edu.stanford.nlp.optimization.QNMinimizer;
+import edu.stanford.nlp.trees.Tree;
+import edu.stanford.nlp.util.Generics;
+import edu.stanford.nlp.util.Timing;
+
+/**
+ * Executable class for training RAE models
+ * 
+ * @author bhanu
+ *
+ */
+
+public class PhraseRepTraining {
+	
+	private static final NumberFormat NF = new DecimalFormat("0.00");
+	private static final NumberFormat FILENAME = new DecimalFormat("0000");
+	private static final NumberFormat NF2 = new DecimalFormat("0.00000000");
+	
+
+	private static double epochCost = 0.0;
+	
+	public static double executeOneTrainingBatch(RNNPhraseModel model, List<Tree> trainingBatch, double[] sumGradSquare) {
+//		ReconstructionCostAndGradient gcFunc1 = new ReconstructionCostAndGradient(model, trainingBatch);
+//		ReconContextCostAndGradient gcFunc = new ReconContextCostAndGradient(model, trainingBatch);
+//		RankingCostAndGradient gcFunc = new RankingCostAndGradient(model, trainingBatch);
+//		ReconRankingCostAndGradient gcFunc = new ReconRankingCostAndGradient(model, trainingBatch);
+//		RankingCostAndGradient2 gcFunc = new RankingCostAndGradient2(model, trainingBatch);
+		
+		String trainedRAEModelName = "data/models/srl/rae_uf_cost333.mo-0028";
+		RNNPhraseModel trainedModel = RNNPhraseModel.loadSerialized(trainedRAEModelName);
+		SimpleMatrix We = trainedModel.getEncodeTransform("", "");
+		CompatibilityCostAndGradient gcFunc = new CompatibilityCostAndGradient(model, We, trainingBatch);
+		
+		
+		double[] theta = model.paramsToVector();
+
+//		//LBFGS
+//		QNMinimizer minimizer = new QNMinimizer(15, true);
+//		theta = minimizer.minimize(gcFunc, 1e-6, theta, 80);
+//		double currCost = gcFunc.valueAt(theta);
+
+		
+		// AdaGrad
+		double eps = 1e-3;
+		double currCost = 0;
+		// TODO: do we want to iterate multiple times per batch?
+		double[] gradf = gcFunc.derivativeAt(theta);
+		currCost = gcFunc.valueAt(theta);		
+//		System.err.println("batch cost: " + currCost);
+		for (int feature = 0; feature<gradf.length;feature++ ) {
+			sumGradSquare[feature] = sumGradSquare[feature] + gradf[feature]*gradf[feature];
+			theta[feature] = theta[feature] - (model.op.trainOptions.learningRate * gradf[feature]/(Math.sqrt(sumGradSquare[feature])+eps));
+		} 
+
+		model.vectorToParams(theta);
+		return currCost;
+
+	}
+
+	public static void train(RNNPhraseModel model, String modelPath, List<Tree> trainingTrees) {
+		Timing timing = new Timing();
+		long maxTrainTimeMillis = model.op.trainOptions.maxTrainTimeSeconds * 1000;
+		long nextDebugCycle = model.op.trainOptions.debugOutputSeconds * 1000;
+		int debugCycle = 0;
+		double bestCost = 1000000000.0;
+
+		// train using AdaGrad (seemed to work best during the dvparser project)
+		double[] sumGradSquare = new double[model.totalParamSize()];
+		Arrays.fill(sumGradSquare, model.op.trainOptions.initialAdagradWeight);
+
+
+		int numBatches = trainingTrees.size() / model.op.trainOptions.batchSize ;//+ 1;
+		System.err.println("Training on " + trainingTrees.size() + " trees in " + numBatches + " batches");
+		System.err.println("Times through each training batch: " + model.op.trainOptions.epochs);
+		for (Integer epoch = 0; epoch < model.op.trainOptions.epochs; ++epoch) {
+			System.err.println("======================================");
+			System.err.println("Starting epoch " + epoch);
+			if (epoch > 0 && model.op.trainOptions.adagradResetFrequency > 0 && 
+					(epoch % model.op.trainOptions.adagradResetFrequency == 0)) {
+				System.err.println("Resetting adagrad weights to " + model.op.trainOptions.initialAdagradWeight);
+				Arrays.fill(sumGradSquare, model.op.trainOptions.initialAdagradWeight);
+			}
+
+			List<Tree> shuffledSentences = Generics.newArrayList(trainingTrees);
+			Collections.shuffle(shuffledSentences, model.rand);
+			epochCost = 0;
+			
+			for (int batch = 0; batch < numBatches; ++batch) {
+//				System.err.println("======================================");
+//				System.err.println("Epoch " + epoch + " batch " + batch);
+
+
+				// Each batch will be of the specified batch size, except the
+				// last batch will include any leftover trees at the end of
+				// the list
+				int startTree = batch * model.op.trainOptions.batchSize;
+				int endTree = (batch + 1) * model.op.trainOptions.batchSize;
+				if (endTree + model.op.trainOptions.batchSize > shuffledSentences.size()) {
+					endTree = shuffledSentences.size();
+				}
+				double batchCost = executeOneTrainingBatch(model, shuffledSentences.subList(startTree, endTree), sumGradSquare);
+				epochCost += batchCost; 
+				
+				long totalElapsed = timing.report();
+//				System.err.println("Finished epoch " + epoch + " batch " + batch + "; total training time " + totalElapsed + " ms");
+
+				if (maxTrainTimeMillis > 0 && totalElapsed > maxTrainTimeMillis) {
+					// no need to debug output, we're done now
+					break;
+				}
+
+				if (nextDebugCycle > 0 && totalElapsed > nextDebugCycle) {
+//				if(epoch+1 % 100 == 0) {
+
+					int nTrees = 100;
+					Evaluate eval = new Evaluate(model, trainingTrees.subList(0, 200), 1);
+//					double score = eval.eval2(devTrees.subList(0, 500));
+//					double score = eval.eval_reconRanking();
+//					score /= nTrees;
+					
+					//compatibility evaluation
+					String trainedRAEModelName = "data/models/srl/rae_uf_cost333.mo-0028";
+					double score = eval.eval_compatibility(trainingTrees.subList(0, nTrees), trainedRAEModelName);
+					System.out.println(score);
+
+
+					//					eval.eval2(devTrees.subList(0,500));
+//					eval.printSummary();
+//					double score = eval.exactNodeAccuracy() * 100.0;
+
+					//           output an intermediate model
+					if (modelPath != null) {
+						String tempPath = modelPath;
+						if (modelPath.endsWith(".ser.gz")) {
+							tempPath = modelPath.substring(0, modelPath.length() - 7) + "-" + FILENAME.format(debugCycle) + "-" + NF2.format(score) + ".ser.gz";
+						} else if (modelPath.endsWith(".gz")) {
+							tempPath = modelPath.substring(0, modelPath.length() - 3) + "-" + FILENAME.format(debugCycle) + "-" + NF2.format(score) + ".gz";
+						} else {
+							tempPath = modelPath.substring(0, modelPath.length() - 3) + "-" + FILENAME.format(debugCycle) + "-" + NF2.format(score);
+						}
+//						tempPath = modelPath.substring(0, modelPath.length() - 3) + "-" + FILENAME.format(debugCycle);
+						model.saveSerialized(tempPath);
+					}
+					// TODO: output a summary of what's happened so far
+
+					++debugCycle;
+					nextDebugCycle = timing.report() + model.op.trainOptions.debugOutputSeconds * 1000;
+				}
+			}
+			long totalElapsed = timing.report();
+			
+
+			if (maxTrainTimeMillis > 0 && totalElapsed > maxTrainTimeMillis) {
+				// no need to debug output, we're done now
+				System.err.println("Max training time exceeded, exiting");
+				break;
+			}
+			
+//			System.err.println("======================================");
+			System.err.println("Cost per tree: " + epochCost/trainingTrees.size());
+			System.err.println("Last Debug Cycle: " + debugCycle);
+			System.err.println("Finished epoch " + epoch + "; total training time " + totalElapsed + " ms");
+		}    
+		
+		model.saveSerialized(modelPath);
+	}
+
+
+	public static boolean runGradientCheck(RNNPhraseModel model, List<Tree> trees) {
+//		ReconstructionCostAndGradient gcFunc = new ReconstructionCostAndGradient(model, trees.subList(0,100));
+//		RankingCostAndGradient gcFunc = new RankingCostAndGradient(model, trees.subList(0, 100));
+//		ReconRankingCostAndGradient gcFunc = new ReconRankingCostAndGradient(model, trees.subList(0,100));
+		RankingCostAndGradient2 gcFunc = new RankingCostAndGradient2(model, trees.subList(0, 100));
+		
+//		String modelname = "data/models/srl/rae_uf_cost333.mo-0028";
+//		RNNPhraseModel trainedModel = RNNPhraseModel.loadSerialized(modelname);
+//		SimpleMatrix We = trainedModel.getEncodeTransform("", "");
+//		CompatibilityCostAndGradient gcFunc = new CompatibilityCostAndGradient(model, We, trees.subList(0,100));
+		model.gradientCheck = true;
+		return gcFunc.gradientCheck(model.totalParamSize(), 50, model.paramsToVector());    
+	}
+
+	public static void main(String[] args) {
+		RNNPhraseOptions op = new RNNPhraseOptions();
+
+		String trainPath = null;
+
+		boolean runGradientCheck = false;
+		boolean runTraining = false;
+		boolean loadmodel = false;
+
+		String modelPath = null;
+		String modelname = null;
+
+		for (int argIndex = 0; argIndex < args.length; ) {
+			if (args[argIndex].equalsIgnoreCase("-train")) {
+				runTraining = true;
+				argIndex++;
+			} else if (args[argIndex].equalsIgnoreCase("-gradientcheck")) {
+				runGradientCheck = true;
+				argIndex++;
+			} else if (args[argIndex].equalsIgnoreCase("-trainpath")) {
+				trainPath = args[argIndex + 1];
+				argIndex += 2;
+			} else if (args[argIndex].equalsIgnoreCase("-model")) {
+				modelPath = args[argIndex + 1];
+				argIndex += 2;
+			}else if (args[argIndex].equalsIgnoreCase("-load")) {
+				loadmodel = true;
+				argIndex++;
+			}else if (args[argIndex].equalsIgnoreCase("-modelname")) {
+				modelname = args[argIndex + 1];
+				argIndex += 2;
+			}else {
+				int newArgIndex = op.setOption(args, argIndex);
+				if (newArgIndex == argIndex) {
+					throw new IllegalArgumentException("Unknown argument " + args[argIndex]);
+				}
+				argIndex = newArgIndex;
+			}
+		}
+
+		// read in the trees, verbs and labels
+		List<Tree> trainingTrees = SRLUtils.readTrees(trainPath);
+
+		// build an unitialized RNTN model for srl from the binary productions
+		
+		RNNPhraseModel model = null;
+		if(loadmodel){
+			System.out.println("Loading Model: "+ modelname);
+			model = RNNPhraseModel.loadSerialized(modelname);
+			System.err.println("Phrase model options:\n" + model.op);
+		}
+		else{
+			model = new RNNPhraseModel(op, trainingTrees);
+			System.err.println("Phrase model options:\n" + op);
+//			RNNPhraseModel model2 = RNNPhraseModel.loadSerialized(modelname);
+//			System.out.println("Setting previously trained matrices.");
+//			model.decodeTransform = model2.decodeTransform;
+//			model.encodeTransform = model2.encodeTransform;
+		}		
+
+		if (runGradientCheck) {
+			runGradientCheck(model, trainingTrees.subList(0, 2000));
+		}
+
+		if (runTraining) {
+			train(model, modelPath, trainingTrees);
+			model.saveSerialized(modelPath);
+		}
+	}
+
+}

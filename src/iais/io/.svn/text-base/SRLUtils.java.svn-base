@@ -1,0 +1,140 @@
+package iais.io;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+import edu.stanford.nlp.io.IOUtils;
+import edu.stanford.nlp.rnn.RNNCoreAnnotations;
+import edu.stanford.nlp.rnn.RNNCoreAnnotations.Categories;
+import edu.stanford.nlp.rnn.RNNCoreAnnotations.Labels;
+import edu.stanford.nlp.rnn.RNNCoreAnnotations.VerbIds;
+import edu.stanford.nlp.trees.MemoryTreebank;
+import edu.stanford.nlp.trees.Tree;
+import edu.stanford.nlp.util.Generics;
+
+/**
+ * In the SRL dataset converted to tree form, the labels on the
+ * intermediate nodes are null, root node of the sub-tree spanned by word-verb pair would have 
+ * the role label of the word to be tagged and the leaves are the
+ * text of the sentence.  This class provides routines to read a file
+ * of those trees.
+ *
+ * @author Bhanu Pratap
+ */
+public class SRLUtils {
+	private SRLUtils() {} // static methods only
+
+	public static void attachGoldLabels(Tree tree) {
+		if (tree.isLeaf()) {
+			return;
+		}
+		for (Tree child : tree.children()) {
+			attachGoldLabels(child);
+		}
+
+		// In the sentiment data set, the node labels are simply the gold
+		// class labels.  There are no categories encoded.
+		//		RNNCoreAnnotations.setGoldClass(tree, Integer.valueOf(tree.label().value()));
+		RNNCoreAnnotations.setGoldClass(tree, -1);
+	}
+
+	public static void attachTagsNVerbIndexes(Tree tree, List<String> verbIds,
+			ArrayList<List<String>> tagslists, Categories categories){
+		//attaches list of  verbindexes and list of list of tags for each verb, to the root of the tree
+		Labels sentTags = new Labels();
+		for (List<String> taglist : tagslists){
+			ArrayList<Integer> tags = Generics.newArrayList();
+			//			sentTags.add(taglist);
+			for(String tag : taglist){
+				tag = tag.trim();
+				Integer tagid = null;
+				if(categories.containsKey(tag))
+					tagid = categories.get(tag.trim());
+				else
+					tagid = categories.get(Config.OTHER_KEY);
+				tags.add(tagid);
+			}
+			sentTags.add(tags);
+		}
+		VerbIds sentVerbs  = new VerbIds();
+		for(String verbIdx : verbIds){
+			if(! verbIdx.equalsIgnoreCase(""))
+				sentVerbs.add(Integer.parseInt(verbIdx));
+			//			else
+			//				sentVerbs.add(null);
+		}
+		RNNCoreAnnotations.setTags(tree, sentTags);
+		RNNCoreAnnotations.setVerbs(tree, sentVerbs);
+		RNNCoreAnnotations.setCategories(tree, categories);
+
+	}
+	
+	/**
+	 * Given a file name, reads in those trees and returns them as a List
+	 */
+	public static List<Tree> readTrees(String treespath) {
+		
+		List<Tree> trees = Generics.newArrayList();
+		MemoryTreebank treebank = new MemoryTreebank();
+		treebank.loadPath(treespath, null);
+		for (int i =0; i < treebank.size(); i++) {
+			Tree tree = treebank.get(i);
+			if(tree.isLeaf()){
+				continue;
+			}
+			trees.add(tree);
+		}
+		return trees;
+	}
+	
+	/**
+	 * Given a file name, reads in those trees and returns them as a List
+	 */
+	public static List<Tree> readTreesWithGoldLabels(String treespath, String verbIDsPath, String labelsPath) {
+		//read verb indexes for each sentence
+		List<List<String>> verbIndexes = Generics.newArrayList();
+		for (String line : IOUtils.readLines(verbIDsPath, "utf-8")) {
+			String[] vids = line.split("\\|");
+			verbIndexes.add( Arrays.asList(vids));
+		}
+
+		//read labels for each sentence
+		ArrayList<ArrayList<List<String>>> allVerbTags = Generics.newArrayList();
+		for (String line : IOUtils.readLines(labelsPath, "utf-8")) {
+			ArrayList<List<String>> sentTags = Generics.newArrayList();
+			String[] tagLists = line.split("\\|");
+			for (String verbtags : tagLists){
+				String[] tags = verbtags.split(" ");
+				sentTags.add(Arrays.asList(tags));
+			}					
+			allVerbTags.add(sentTags);
+		}
+
+		//read categories
+		
+		Categories categories = Categories.getIOBCategories();
+
+		//attach verbindexes and labels to trees
+		List<Tree> trees = Generics.newArrayList();
+		MemoryTreebank treebank = new MemoryTreebank();
+		treebank.loadPath(treespath, null);
+		for (int i =0; i < treebank.size(); i++) {
+			Tree tree = treebank.get(i);
+			if(tree.isLeaf()){
+				//				System.out.println("got only one word tree");
+				continue;
+			}
+			attachTagsNVerbIndexes(tree, verbIndexes.get(i), allVerbTags.get(i), categories);
+			//			attachGoldLabels(tree);
+
+			trees.add(tree);
+		}
+		return trees;
+	}
+
+
+}

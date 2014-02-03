@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<wc-entries
+   xmlns="svn:">
+<entry
+   name=""
+   repos="https://svn-int.iais.fraunhofer.de/repos/tmusers"
+   revision="8263"
+   last-author="bpratap"
+   url="https://svn-int.iais.fraunhofer.de/repos/tmusers/open/bpratap/RNTN/src/iais/execs"
+   committed-rev="8263"
+   kind="dir"
+   committed-date="2013-11-15T16:54:35.076000Z"/>
+<entry
+   name="CompareModels.java"
+   revision="8328"
+   checksum="0946e6b64ce4bf2ddf0cac48314cf32e"
+   last-author="bpratap"
+   committed-rev="8328"
+   text-time="2014-01-14T14:33:07.000000Z"
+   kind="file"
+   committed-date="2014-01-14T14:33:09.524000Z"/>
+<entry
+   name="PhraseRepTraining.java"
+   revision="8328"
+   checksum="0df6d62f26c8fe30970fdd153b68fa77"
+   last-author="bpratap"
+   committed-rev="8328"
+   text-time="2014-01-14T13:15:11.000000Z"
+   kind="file"
+   committed-date="2014-01-14T14:33:09.524000Z"/>
+<entry
+   name="SRLTraining.java"
+   revision="8318"
+   checksum="076608807d90e3116a80e823bb3908cc"
+   last-author="bpratap"
+   text-time="2013-12-20T15:00:12.000000Z"
+   committed-rev="8318"
+   kind="file"
+   committed-date="2013-12-30T17:33:01.181000Z"/>
+</wc-entries>

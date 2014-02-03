@@ -1,0 +1,254 @@
+package iais.execs;
+
+import iais.io.Config;
+import iais.io.SRLUtils;
+import iais.network.Evaluate;
+import iais.network.RNTNModel;
+import iais.network.SRLCostAndGradient;
+import iais.network.SRLCostAndGradient2;
+
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Random;
+
+import edu.stanford.nlp.sentiment.RNNOptions;
+import edu.stanford.nlp.trees.Tree;
+import edu.stanford.nlp.util.Generics;
+import edu.stanford.nlp.util.Timing;
+
+
+public class SRLTraining {
+
+	private static final NumberFormat NF = new DecimalFormat("0.00");
+	private static final NumberFormat FILENAME = new DecimalFormat("0000");
+
+	public static void executeOneTrainingBatch(RNTNModel model, List<Tree> trainingBatch, double[] sumGradSquare) {
+		SRLCostAndGradient gcFunc = new SRLCostAndGradient(model, trainingBatch);
+//		SRLCostAndGradient2 gcFunc = new SRLCostAndGradient2(model, trainingBatch);
+		double[] theta = model.paramsToVector();
+
+		// AdaGrad
+		double eps = 1e-3;
+		double currCost = 0;
+
+		// TODO: do we want to iterate multiple times per batch?
+		double[] gradf = gcFunc.derivativeAt(theta);
+		currCost = gcFunc.valueAt(theta);
+		System.err.println("batch cost: " + currCost);
+		for (int feature = 0; feature<gradf.length;feature++ ) {
+			sumGradSquare[feature] = sumGradSquare[feature] + gradf[feature]*gradf[feature];
+			theta[feature] = theta[feature] - (model.op.trainOptions.learningRate * gradf[feature]/(Math.sqrt(sumGradSquare[feature])+eps));
+		} 
+
+		model.vectorToParams(theta);
+
+	}
+
+	public static void train(RNTNModel model, String modelPath, List<Tree> trainingTrees, List<Tree> devTrees, int seed) {
+		Timing timing = new Timing();
+		long maxTrainTimeMillis = model.op.trainOptions.maxTrainTimeSeconds * 1000;
+		long nextDebugCycle = model.op.trainOptions.debugOutputSeconds * 1000;
+		int debugCycle = 0;
+		double bestAccuracy = 0.0;
+
+		// train using AdaGrad (seemed to work best during the dvparser project)
+		double[] sumGradSquare = new double[model.totalParamSize()];
+		Arrays.fill(sumGradSquare, model.op.trainOptions.initialAdagradWeight);
+		
+//		//calculate mean and std for trees
+//		List<Tree> allTrees = Generics.newArrayList();
+//		allTrees.addAll(trainingTrees); allTrees.addAll(devTrees);
+//		double mean = getMean(allTrees);
+//		double std = getStandardDeviation(allTrees);
+		
+		//merge train and dev sets and use only last 500 trees for cv
+		trainingTrees.addAll(devTrees);
+		Collections.shuffle(trainingTrees, new Random(seed));		
+		trainingTrees = trainingTrees.subList(0, trainingTrees.size()-500);
+		devTrees = trainingTrees.subList(trainingTrees.size()-500, trainingTrees.size());
+
+		int numBatches = trainingTrees.size() / model.op.trainOptions.batchSize ;//+ 1;
+		System.err.println("Training on " + trainingTrees.size() + " trees in " + numBatches + " batches");
+		System.err.println("Times through each training batch: " + model.op.trainOptions.epochs);
+		for (int epoch = 0; epoch < model.op.trainOptions.epochs; ++epoch) {
+			System.err.println("======================================");
+			System.err.println("Starting epoch " + epoch);
+			if (epoch > 0 && model.op.trainOptions.adagradResetFrequency > 0 && 
+					(epoch % model.op.trainOptions.adagradResetFrequency == 0)) {
+				System.err.println("Resetting adagrad weights to " + model.op.trainOptions.initialAdagradWeight);
+				Arrays.fill(sumGradSquare, model.op.trainOptions.initialAdagradWeight);
+			}
+
+			List<Tree> shuffledSentences = Generics.newArrayList(trainingTrees);
+			Collections.shuffle(shuffledSentences, model.rand);
+			for (int batch = 0; batch < numBatches; ++batch) {
+				System.err.println("======================================");
+				System.err.println("Epoch " + epoch + " batch " + batch);
+
+
+				// Each batch will be of the specified batch size, except the
+				// last batch will include any leftover trees at the end of
+				// the list
+				int startTree = batch * model.op.trainOptions.batchSize;
+				int endTree = (batch + 1) * model.op.trainOptions.batchSize;
+				if (endTree + model.op.trainOptions.batchSize > shuffledSentences.size()) {
+					endTree = shuffledSentences.size();
+				}
+				executeOneTrainingBatch(model, shuffledSentences.subList(startTree, endTree), sumGradSquare);
+
+				long totalElapsed = timing.report();
+				System.err.println("Finished epoch " + epoch + " batch " + batch + "; total training time " + totalElapsed + " ms");
+
+				if (maxTrainTimeMillis > 0 && totalElapsed > maxTrainTimeMillis) {
+					// no need to debug output, we're done now
+					break;
+				}
+
+				if (nextDebugCycle > 0 && totalElapsed > nextDebugCycle) {
+
+					Evaluate eval = new Evaluate(model);
+					double score = eval.eval(devTrees.subList(0, 500));
+//					Evaluate eval = new Evaluate(model, 2);
+//					double score = eval.eval2(devTrees.subList(0, 500));
+//					double score = eval.eval2(trainingTrees.subList(0, 500));
+
+					//					eval.eval2(devTrees.subList(0,500));
+//					eval.printSummary();
+//					double score = eval.exactNodeAccuracy() * 100.0;
+
+					//           output an intermediate model
+					if (modelPath != null) {
+						String tempPath = modelPath;
+						if (modelPath.endsWith(".ser.gz")) {
+							tempPath = modelPath.substring(0, modelPath.length() - 7) + "-" + FILENAME.format(debugCycle) + "-" + NF.format(score) + ".ser.gz";
+						} else if (modelPath.endsWith(".gz")) {
+							tempPath = modelPath.substring(0, modelPath.length() - 3) + "-" + FILENAME.format(debugCycle) + "-" + NF.format(score) + ".gz";
+						} else {
+							tempPath = modelPath.substring(0, modelPath.length() - 3) + "-" + FILENAME.format(debugCycle) + "-" + NF.format(score);
+						}
+//						tempPath = modelPath.substring(0, modelPath.length() - 3) + "-" + FILENAME.format(debugCycle);
+						model.saveSerialized(tempPath);
+					}
+
+					// TODO: output a summary of what's happened so far
+
+					++debugCycle;
+					nextDebugCycle = timing.report() + model.op.trainOptions.debugOutputSeconds * 1000;
+				}
+			}
+			long totalElapsed = timing.report();
+
+			if (maxTrainTimeMillis > 0 && totalElapsed > maxTrainTimeMillis) {
+				// no need to debug output, we're done now
+				System.err.println("Max training time exceeded, exiting");
+				break;
+			}
+		}    
+	}
+
+	private static double getStandardDeviation(List<Tree> allTrees) {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+
+	private static double getMean(List<Tree> allTrees) {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+
+	public static boolean runGradientCheck(RNTNModel model, List<Tree> trees) {
+//		SRLCostAndGradient gcFunc = new SRLCostAndGradient(model, trees);
+		SRLCostAndGradient2 gcFunc = new SRLCostAndGradient2(model, trees);
+		return gcFunc.gradientCheck(model.totalParamSize(), 50, model.paramsToVector());    
+	}
+
+	public static void main(String[] args) {
+		RNNOptions op = new RNNOptions();
+
+		String trainPath = null;
+		String devPath = null;
+
+		boolean runGradientCheck = false;
+		boolean runTraining = false;
+		boolean loadmodel = false;
+
+		String modelPath = null;
+		String modelname = null;
+		int seed = 42;
+
+		for (int argIndex = 0; argIndex < args.length; ) {
+			if (args[argIndex].equalsIgnoreCase("-train")) {
+				runTraining = true;
+				argIndex++;
+			} else if (args[argIndex].equalsIgnoreCase("-gradientcheck")) {
+				runGradientCheck = true;
+				argIndex++;
+			} else if (args[argIndex].equalsIgnoreCase("-trainpath")) {
+				trainPath = args[argIndex + 1];
+				argIndex += 2;
+			} else if (args[argIndex].equalsIgnoreCase("-devpath")) {
+				devPath = args[argIndex + 1];
+				argIndex += 2;
+			} else if (args[argIndex].equalsIgnoreCase("-model")) {
+				modelPath = args[argIndex + 1];
+				argIndex += 2;
+			}else if (args[argIndex].equalsIgnoreCase("-load")) {
+				loadmodel = true;
+				argIndex++;
+			}else if (args[argIndex].equalsIgnoreCase("-modelname")) {
+				modelname = args[argIndex + 1];
+				argIndex += 2;
+			}else if (args[argIndex].equalsIgnoreCase("-seed")) {
+				seed = Integer.parseInt(args[argIndex + 1]);
+				argIndex += 2;
+			}else {
+				int newArgIndex = op.setOption(args, argIndex);
+				if (newArgIndex == argIndex) {
+					throw new IllegalArgumentException("Unknown argument " + args[argIndex]);
+				}
+				argIndex = newArgIndex;
+			}
+		}
+
+		// read in the trees, verbs and labels
+		List<Tree> trainingTrees = SRLUtils.readTreesWithGoldLabels(trainPath, Config.VERBIDS_TRAIN, Config.LABELS_TRAIN, Config.POS_TRAIN);
+		List<Tree> devTrees = SRLUtils.readTreesWithGoldLabels(devPath,Config.VERBIDS_DEV, Config.LABELS_DEV, Config.POS_DEV);
+
+
+		// build an unitialized RNTN model for srl from the binary productions
+		System.err.println("Sentiment model options:\n" + op);
+		RNTNModel model = null;
+		if(loadmodel){
+			System.out.println("Loading Model: "+ modelname);
+			model = RNTNModel.loadSerialized(modelname);
+		}
+		else{
+			model = new RNTNModel(op, trainingTrees);
+//			RNTNModel model2 = RNTNModel.loadSerialized(modelname);
+////			model.unaryClassification = model2.unaryClassification;
+//			model.binaryTransform = model2.binaryTransform;
+//			model.binaryTensors = model2.binaryTensors;
+		}
+
+		// TODO: need to handle unk rules somehow... at test time the tree
+		// structures might have something that we never saw at training
+		// time.  for example, we could put a threshold on all of the
+		// rules at training time and anything that doesn't meet that
+		// threshold goes into the unk.  perhaps we could also use some
+		// component of the accepted training rules to build up the "unk"
+		// parameter in case there are no rules that don't meet the
+		// threshold
+
+		if (runGradientCheck) {
+			runGradientCheck(model, trainingTrees.subList(0, 10));
+		}
+
+		if (runTraining) {
+			train(model, modelPath, trainingTrees, devTrees, seed);
+			model.saveSerialized(modelPath);
+		}
+	}
+}

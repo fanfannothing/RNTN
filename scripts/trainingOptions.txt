@@ -1,0 +1,3 @@
+SRLTraining:
+
+-train   -modelname data/models/srl.mo-0002-34.27 -trainpath data/corpus/srlRNTN.train -devpath data/corpus/srlRNTN.dev -model data/models/srl_new/srl_ws2_notensor_senna.model -nouseTensors -norandomWordVectors -wordVectors data/corpus/senna_word_embs.txt -lowercaseWordVectors

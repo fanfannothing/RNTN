@@ -1,0 +1,25 @@
+package iais.io;
+
+public class Config {
+	
+	public static final String PROJECT_HOME = "/home/bhanu/workspace/RNTN/";
+
+	public static final String VERBIDS_TRAIN = PROJECT_HOME+"data/corpus/srl_vids.train";
+	
+	public static final String LABELS_TRAIN = PROJECT_HOME+"data/corpus/srl_labels.train";
+	
+	public static final String CATEGORIES = PROJECT_HOME+"data/corpus/srl.categories";
+	
+	public static final String FREQ_CATEGORIES = PROJECT_HOME+"data/corpus/srl_Freq.categories";
+
+	public static final String VERBIDS_DEV = PROJECT_HOME+"data/corpus/srl_vids.dev";
+	
+	public static final String LABELS_DEV = PROJECT_HOME+"data/corpus/srl_labels.dev";
+	
+	public static final Integer NMOST_FREQUENT_CATS = 34;
+
+	public static final String OTHER_KEY = "OTHER";
+	
+	
+	
+}

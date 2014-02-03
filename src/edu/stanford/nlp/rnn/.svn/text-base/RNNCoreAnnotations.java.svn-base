@@ -1,0 +1,423 @@
+package edu.stanford.nlp.rnn;
+
+import iais.io.Config;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+
+import org.ejml.simple.SimpleMatrix;
+
+import edu.stanford.nlp.ling.CoreAnnotation;
+import edu.stanford.nlp.ling.CoreLabel;
+import edu.stanford.nlp.ling.Label;
+import edu.stanford.nlp.rnn.RNNCoreAnnotations.Categories;
+import edu.stanford.nlp.trees.Tree;
+
+public class RNNCoreAnnotations {
+
+	private RNNCoreAnnotations() {} // only static members
+
+	/**
+	 * Used to denote the vector at a particular node
+	 */
+	public static class NodeVector implements CoreAnnotation<SimpleMatrix> {
+		public Class<SimpleMatrix> getType() {
+			return SimpleMatrix.class;
+		}
+	}
+
+	public static SimpleMatrix getNodeVector(Tree tree) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to get the attached node vector");
+		}
+		return ((CoreLabel) label).get(NodeVector.class);
+	}
+	
+	public static void setNodeVector(Tree tree, SimpleMatrix vector) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to get the attached node vector");
+		}
+		((CoreLabel) label).set(NodeVector.class, vector);
+	}
+	
+	/**
+	 * Used to denote the vector at a particular node
+	 */
+	public static class NodeVectorNeg implements CoreAnnotation<SimpleMatrix> {
+		public Class<SimpleMatrix> getType() {
+			return SimpleMatrix.class;
+		}
+	}
+
+	public static SimpleMatrix getNodeVectorNeg(Tree tree) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to get the attached node vector");
+		}
+		return ((CoreLabel) label).get(NodeVectorNeg.class);
+	}
+	
+	public static void setNodeVectorNeg(Tree tree, SimpleMatrix vector) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to get the attached node vector");
+		}
+		((CoreLabel) label).set(NodeVectorNeg.class, vector);
+	}
+	
+	/**
+	 * Used to denote the phrase reconstruction vector at a particular node
+	 */
+	public static class RAEVector implements CoreAnnotation<SimpleMatrix> {
+		public Class<SimpleMatrix> getType() {
+			return SimpleMatrix.class;
+		}
+	}
+
+	public static SimpleMatrix getRAEVector(Tree tree) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to get the attached rae vector");
+		}
+		return ((CoreLabel) label).get(RAEVector.class);
+	}
+	
+	public static void setRAEVector(Tree tree, SimpleMatrix vector) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to get the attached rae vector");
+		}
+		((CoreLabel) label).set(RAEVector.class, vector);
+	}
+	
+	/**
+	 * Used to denote the phrase left context vectors at a particular node
+	 */
+	public static class LeftContextVectors implements CoreAnnotation<SimpleMatrix> {
+		public Class<SimpleMatrix> getType() {
+			return SimpleMatrix.class;
+		}
+	}
+
+	public static SimpleMatrix getLeftContextVecs(Tree tree) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to get the attached rae vector");
+		}
+		return ((CoreLabel) label).get(LeftContextVectors.class);
+	}
+	
+	public static void setLeftContextVecs(Tree tree, SimpleMatrix vector) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to get the attached rae vector");
+		}
+		((CoreLabel) label).set(LeftContextVectors.class, vector);
+	}
+	
+	/**
+	 * Used to denote the phrase Right context vectors at a particular node
+	 */
+	public static class RightContextVectors implements CoreAnnotation<SimpleMatrix> {
+		public Class<SimpleMatrix> getType() {
+			return SimpleMatrix.class;
+		}
+	}
+
+	public static SimpleMatrix getRightContextVecs(Tree tree) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to get the attached rae vector");
+		}
+		return ((CoreLabel) label).get(RightContextVectors.class);
+	}
+	
+	public static void setRightContextVecs(Tree tree, SimpleMatrix vector) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to get the attached rae vector");
+		}
+		((CoreLabel) label).set(RightContextVectors.class, vector);
+	}
+
+
+	/**
+	 * Used to denote a top-delta of a particular node
+	 */
+	public static class NodeDelta implements CoreAnnotation<SimpleMatrix> {
+		public Class<SimpleMatrix> getType() {
+			return SimpleMatrix.class;
+		}
+	}
+	public static SimpleMatrix getNodeDelta(Tree tree) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to get the attached predictions");
+		}
+		return ((CoreLabel) label).get(NodeDelta.class);
+	}
+	public static void setNodeDelta(Tree tree, SimpleMatrix delta){
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to set the attached delta");
+		}
+		((CoreLabel) label).set(NodeDelta.class, delta);
+	}
+
+
+	/**
+	 * Used to denote a vector of predictions at a particular node
+	 */
+	public static class Predictions implements CoreAnnotation<SimpleMatrix> {
+		public Class<SimpleMatrix> getType() {
+			return SimpleMatrix.class;
+		}
+	}
+
+	public static SimpleMatrix getPredictions(Tree tree) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to get the attached predictions");
+		}
+		return ((CoreLabel) label).get(Predictions.class);
+	}
+
+	/**
+	 * argmax of the Predictions
+	 */
+	public static class PredictedClass implements CoreAnnotation<Integer> {
+		public Class<Integer> getType() {
+			return Integer.class;
+		}
+	}
+
+	public static int getPredictedClass(Tree tree) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to get the attached gold class");
+		}
+		return ((CoreLabel) label).get(PredictedClass.class);
+	}
+
+	/**
+	 * The index of the correct class
+	 */
+	public static class GoldClass implements CoreAnnotation<Integer> {
+		public Class<Integer> getType() {
+			return Integer.class;
+		}
+	}
+
+	public static int getGoldClass(Tree tree) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to get the attached gold class");
+		}
+		return ((CoreLabel) label).get(GoldClass.class);
+	}
+
+	public static void setGoldClass(Tree tree, int goldClass) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to get the attached gold class");
+		}
+		((CoreLabel) label).set(GoldClass.class, goldClass);
+	}
+
+	public static class PredictionError implements CoreAnnotation<Double> {
+		public Class<Double> getType() {
+			return Double.class;
+		}
+	}
+
+	public static double getPredictionError(Tree tree) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to get the attached prediction error");
+		}
+		return ((CoreLabel) label).get(PredictionError.class);
+	}
+
+	public static void setPredictionError(Tree tree, double error) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to set the attached prediction error");
+		}
+		((CoreLabel) label).set(PredictionError.class, error);
+	}
+
+
+	public static class Labels extends ArrayList<ArrayList<Integer>>{}
+	public static class VerbIds extends ArrayList<Integer>{}
+	public static class Categories extends HashMap<String,Integer>{
+
+		public static Categories getIOBCategories() {
+			//read categories
+			Integer nMostFreqCats = Config.NMOST_FREQUENT_CATS;  //number of classes would be 34 + 1 
+			Categories categories = new Categories();
+			try{
+				FileReader reader = new FileReader(new File(Config.FREQ_CATEGORIES));
+				BufferedReader bfr = new BufferedReader(reader);
+				//						Iterable<String> catsStr = IOUtils.readLines(Config.CATEGORIES, "utf-8");
+
+				Integer cid = 0;
+				for(cid=0; cid<nMostFreqCats; cid++){
+					String key = bfr.readLine();
+					key = key.trim();
+					categories.put(key, cid);		
+				}
+				categories.put(Config.OTHER_KEY, cid);  // rest of the categories would be mapped to this OTHER category
+			}catch(Exception e){
+				e.printStackTrace();
+			}
+			return categories;
+		}
+
+		public static Categories getRoleCats(Categories iobCategories) {
+			Categories categories = new Categories();
+			int id = 0;
+			for(String key : iobCategories.keySet()){
+
+				if((categories.get(key) == null) && (key.equalsIgnoreCase("O") || key.equalsIgnoreCase(Config.OTHER_KEY))){
+					categories.put(key, id);
+					id += 1;
+				}
+				else if(categories.get(key.substring(2)) == null ){
+					categories.put(key.substring(2), id);
+					id += 1;
+				}
+			}
+			return categories;
+		}
+	}
+	public static class TagsAnnotation implements CoreAnnotation<Labels> {
+		public Class<Labels> getType() {
+			return Labels.class;
+		}
+	}
+	public static class VerbIdsAnnotation implements CoreAnnotation<VerbIds>{
+		public Class<VerbIds> getType(){
+			return VerbIds.class;
+		}
+	}
+	public static class CategoriesAnnotation implements CoreAnnotation<Categories>{
+		public Class<Categories> getType() {
+			// TODO Auto-generated method stub
+			return Categories.class;
+		}
+	}
+	public static Labels getTags(Tree tree) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to get the attached Labels");
+		}
+		return ((CoreLabel) label).get(TagsAnnotation.class);
+	}
+	public static void setTags(Tree tree, Labels tags) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to set the attached Labels");
+		}
+		((CoreLabel) label).set(TagsAnnotation.class, tags);
+
+	}
+	public static VerbIds getVerbs(Tree tree) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to get the attached Verb Indexes");
+		}
+		return ((CoreLabel) label).get(VerbIdsAnnotation.class);
+	}
+	public static void setVerbs(Tree tree, VerbIds vids){
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to set the attached Verb Indexes");
+		}
+		((CoreLabel) label).set(VerbIdsAnnotation.class, vids);
+	}
+	public static void setCategories(Tree tree, Categories cats){
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to set the attached Categories");
+		}
+		((CoreLabel) label).set(CategoriesAnnotation.class, cats);
+	}
+	public static Categories getCategories(Tree tree) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to get the attached Categories");
+		}
+		return ((CoreLabel) label).get(CategoriesAnnotation.class);
+	}
+	public static class AdditionalFeatures implements CoreAnnotation<SimpleMatrix>{
+		public Class<SimpleMatrix> getType(){
+			return SimpleMatrix.class;
+		}
+	}
+	public static void setAdditionalFeatures(Tree tree, SimpleMatrix features){
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to set the additional features");
+		}
+		((CoreLabel) label).set(AdditionalFeatures.class, features);
+	}
+	public static SimpleMatrix getAdditionalFeatures(Tree tree){
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to get the additional Features");
+		}
+		return ((CoreLabel) label).get(AdditionalFeatures.class);
+	}
+	
+	public static class ReconstructionError implements CoreAnnotation<Double> {
+		public Class<Double> getType() {
+			return Double.class;
+		}
+	}
+
+	public static double getReconstructionError(Tree tree) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to get the attached ReconstructionError error");
+		}
+		return ((CoreLabel) label).get(ReconstructionError.class);
+	}
+
+	public static void setReconstructionError(Tree tree, double error) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to set the attached ReconstructionError error");
+		}
+		((CoreLabel) label).set(ReconstructionError.class, error);
+	}
+	
+	public static class RankingError implements CoreAnnotation<Double> {
+		public Class<Double> getType() {
+			return Double.class;
+		}
+	}
+
+	public static double getRankingError(Tree tree) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to get the attached ReconstructionError error");
+		}
+		return ((CoreLabel) label).get(RankingError.class);
+	}
+
+	public static void setRankingError(Tree tree, double error) {
+		Label label = tree.label();
+		if (!(label instanceof CoreLabel)) {
+			throw new IllegalArgumentException("CoreLabels required to set the attached ReconstructionError error");
+		}
+		((CoreLabel) label).set(RankingError.class, error);
+	}
+
+}

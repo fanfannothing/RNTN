@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<wc-entries
+   xmlns="svn:">
+<entry
+   repos="https://svn-int.iais.fraunhofer.de/repos/tmusers"
+   name=""
+   revision="8263"
+   last-author="bpratap"
+   url="https://svn-int.iais.fraunhofer.de/repos/tmusers/open/bpratap/RNTN/src/iais/network"
+   committed-rev="8263"
+   kind="dir"
+   committed-date="2013-11-15T16:54:35.076000Z"/>
+<entry
+   name="CompatibilityCostAndGradient.java"
+   revision="8327"
+   checksum="f9a08e007cc2527f233da8aa094987ae"
+   last-author="bpratap"
+   committed-rev="8327"
+   text-time="2014-01-14T11:53:05.000000Z"
+   kind="file"
+   committed-date="2014-01-14T12:03:03.726000Z"/>
+<entry
+   name="Evaluate.java"
+   revision="8326"
+   checksum="fc196589500073ea7b1b6001d7074613"
+   last-author="bpratap"
+   committed-rev="8326"
+   text-time="2014-01-10T14:30:25.000000Z"
+   kind="file"
+   committed-date="2014-01-10T14:43:26.922000Z"/>
+<entry
+   name="RAEModel.java"
+   revision="8281"
+   checksum="14a98c88a9d81a778e39429398afb966"
+   last-author="bpratap"
+   text-time="2013-12-03T17:50:42.000000Z"
+   committed-rev="8281"
+   kind="file"
+   committed-date="2013-12-06T10:46:23.952000Z"/>
+<entry
+   name="RNNPhraseModel.java"
+   revision="8327"
+   checksum="ec27316901460be96c6977be967c8afa"
+   last-author="bpratap"
+   committed-rev="8327"
+   text-time="2014-01-14T10:57:53.000000Z"
+   kind="file"
+   committed-date="2014-01-14T12:03:03.726000Z"/>
+<entry
+   name="RNNPhraseOptions.java"
+   revision="8318"
+   checksum="dd34c6a04823dc9a5485153bd01ec6f1"
+   last-author="bpratap"
+   committed-rev="8318"
+   text-time="2013-12-23T11:14:46.000000Z"
+   kind="file"
+   committed-date="2013-12-30T17:33:01.181000Z"/>
+<entry
+   name="RNTNModel.java"
+   revision="8325"
+   checksum="14c9edf2a1750aa93dc08e3823ac1df9"
+   last-author="bpratap"
+   committed-rev="8325"
+   text-time="2014-01-09T17:47:17.000000Z"
+   kind="file"
+   committed-date="2014-01-09T18:35:17.861000Z"/>
+<entry
+   name="RankingCostAndGradient.java"
+   revision="8327"
+   checksum="2b441adb963bd3ab0f2ba8fabbfb98c8"
+   last-author="bpratap"
+   committed-rev="8327"
+   text-time="2014-01-13T14:07:12.000000Z"
+   kind="file"
+   committed-date="2014-01-14T12:03:03.726000Z"/>
+<entry
+   name="RankingCostAndGradient2.java"
+   revision="8327"
+   checksum="9e63af0c31fa04230dc80004a488b05e"
+   last-author="bpratap"
+   committed-rev="8327"
+   text-time="2014-01-14T12:02:43.000000Z"
+   kind="file"
+   committed-date="2014-01-14T12:03:03.726000Z"/>
+<entry
+   name="ReconContextCostAndGradient.java"
+   revision="8319"
+   checksum="0f0515e568396d4918469b0baeeee4ff"
+   last-author="bpratap"
+   committed-rev="8319"
+   text-time="2014-01-02T16:04:39.000000Z"
+   kind="file"
+   committed-date="2014-01-03T15:48:17.703000Z"/>
+<entry
+   name="ReconRankingCostAndGradient.java"
+   revision="8326"
+   checksum="348bfbf28b46c67c461fcd281456e194"
+   last-author="bpratap"
+   text-time="2014-01-10T13:16:19.000000Z"
+   committed-rev="8326"
+   kind="file"
+   committed-date="2014-01-10T14:43:26.922000Z"/>
+<entry
+   name="ReconstructionCostAndGradient.java"
+   revision="8327"
+   checksum="5ebdde4a22eed9dcef16dc3904a119fb"
+   last-author="bpratap"
+   committed-rev="8327"
+   text-time="2014-01-14T11:52:37.000000Z"
+   kind="file"
+   committed-date="2014-01-14T12:03:03.726000Z"/>
+<entry
+   name="SRLCostAndGradient.java"
+   revision="8325"
+   checksum="4c155c00018064452acf426d30bf933b"
+   last-author="bpratap"
+   committed-rev="8325"
+   text-time="2014-01-09T17:52:07.000000Z"
+   kind="file"
+   committed-date="2014-01-09T18:35:17.861000Z"/>
+<entry
+   name="SRLCostAndGradient2.java"
+   revision="8325"
+   checksum="2c7a57763d15ec3d854b7d101b3843f0"
+   last-author="bpratap"
+   committed-rev="8325"
+   text-time="2014-01-09T17:57:00.000000Z"
+   kind="file"
+   committed-date="2014-01-09T18:35:17.861000Z"/>
+</wc-entries>
